@@ -1,5 +1,4 @@
-#include <Adafruit_GFX.h>      // include Adafruit graphics library
-#include <Adafruit_ST7735.h>   // include Adafruit ST7735 TFT library
+#include <TFT_eSPI.h> // Подключаем библиотеку TFT_eSPI
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <Arduino.h>
@@ -9,22 +8,18 @@
 #include "OpenWeatherMapCurrent.h"
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <Fonts/FreeMonoBold12pt7b.h>
-#include <Fonts/FreeMono12pt7b.h>
-#include <Fonts/FreeSans9pt7b.h>
-#include <Fonts/FreeSans12pt7b.h>
-#include <Fonts/FreeSansBold18pt7b.h>
-#include <Fonts/FreeSansBold9pt7b.h>
+#include <UnixTime.h> //библиотека для преобразования времени с unix в utc
+
+//шрифты нового дизайна
+#include "Golos_Text_Regular12.h" //маленький текст (2 экран)
+#include "Golos_Text_Regular22.h" //текст
+#include "Golos_Text_Regular30.h" //мельникие цифры
+#include "Golos_Text_Regular44.h" //цифры
+#include "Golos_Text_Regular84.h" //большие часы
 
 OpenWeatherMapCurrent client;
 
-// ST7735 TFT module connections
-#define TFT_RST   D4     // TFT RST pin is connected to NodeMCU pin D4 (GPIO2)
-#define TFT_CS    D3     // TFT CS  pin is connected to NodeMCU pin D4 (GPIO0)
-#define TFT_DC    D2     // TFT DC  pin is connected to NodeMCU pin D4 (GPIO4)
-
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
-
+TFT_eSPI tft = TFT_eSPI(); // Инициализация дисплея
 
 String OPEN_WEATHER_MAP_APP_ID = "13980c74ae68780b82ce16cbec00fae2";
 String OPEN_WEATHER_MAP_LOCATION = "Ekaterinburg";
@@ -32,15 +27,26 @@ String OPEN_WEATHER_MAP_LANGUAGE = "en";
 boolean IS_METRIC = true;
 
 const char* ESP_HOST_NAME = "esp-" + ESP.getFlashChipId();
-const char* WIFI_SSID     = "Ayur";
-const char* WIFI_PASSWORD = "12082005";
+const char* WIFI_SSID     = "Ayur"; //"Galaxy A52FADF";
+const char* WIFI_PASSWORD = "12082005"; //"izzr8141";
 
 const long utcOffsetInSeconds = 18000;
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+String daysOfTheWeek[7] = {"вс", "пн", "вт", "ср", "чт", "пт", "сб"};
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 uint16_t colors[7]={0xF800, 0xFB20, 0xFFE0, 0x87E0, 0x04E0, 0x07FF, 0x03DF};
 uint16_t col=0;
+ 
+String monthsNames[13] = {"Заглушка", "января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"};
+String weatherNames[7] = {"облачно", "дождливо", "гроза", "солнечно", "морось", "снежно", "туманно"};
+int weatherNum = -1;
+
+String dayName2 = "";
+String dayName3 = "";
+String dayName4 = "";
+
+int oM = 99;
+
 const unsigned char thunder[] PROGMEM = {
   B00000000,B00000000,B00000000,B00000000,B00000000,B00000000,B00000000,
   B00000000,B00000000,B00000000,B00111110,B00000000,B00000000,B00000000,
@@ -258,49 +264,6 @@ const unsigned char mist[] PROGMEM = {
   B00000000,B00111100,B00001111,B00011110,B00000111,B10000000,B00000000
 };
 
-const unsigned char clearS[] PROGMEM = {
-  B00000000,B00000000,B00000000,B00000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000110,B00000000,B01000000,B00001100,B00000000,B00000000,
-  B00000000,B00000011,B00000000,B01000000,B00011000,B00000000,B00000000,
-  B00000000,B00000001,B00000000,B01000000,B00010000,B00000000,B00000000,
-  B00000000,B00000000,B10000000,B10100000,B00100000,B00000000,B00000000,
-  B00000000,B00000000,B01011111,B00011111,B01000000,B00000000,B00000000,
-  B00111000,B00000000,B01100000,B00000000,B11100000,B00000001,B10000000,
-  B00000110,B00000001,B10000000,B00000000,B00011000,B00001100,B00000000,
-  B00000001,B11000110,B00000000,B00000000,B00001100,B01110000,B00000000,
-  B00000000,B00101100,B00000000,B00000000,B00000110,B11000000,B00000000,
-  B00000000,B00001000,B00000000,B00000000,B00000011,B00000000,B00000000,
-  B00000000,B00010000,B00000000,B00000000,B00000001,B00000000,B00000000,
-  B00000000,B00110000,B00000000,B00000000,B00000001,B10000000,B00000000,
-  B00000000,B00100000,B00000000,B00000000,B00000000,B10000000,B00000000,
-  B00000000,B00100000,B00000000,B00000000,B00000000,B10000000,B00000000,
-  B00111111,B11100000,B00000000,B00000000,B00000000,B11111111,B11000000,
-  B00000000,B00100000,B00000000,B00000000,B00000000,B10000000,B00000000,
-  B00000000,B00100000,B00000000,B00000000,B00000000,B10000000,B00000000,
-  B00000000,B00110000,B00000000,B00000000,B00000001,B10000000,B00000000,
-  B00000000,B00010000,B00000000,B00000000,B00000001,B00000000,B00000000,
-  B00000000,B00001000,B00000000,B00000000,B00000011,B00000000,B00000000,
-  B00000000,B01101100,B00000000,B00000000,B00000110,B11000000,B00000000,
-  B00000001,B11000110,B00000000,B00000000,B00001100,B01110000,B00000000,
-  B00001110,B00000001,B10000000,B00000000,B00110000,B00001110,B00000000,
-  B00110000,B00000000,B01100000,B00000000,B11000000,B00000001,B10000000,
-  B00000000,B00000000,B01011111,B00011111,B01100000,B00000000,B00000000,
-  B00000000,B00000000,B10000000,B00000000,B00100000,B00000000,B00000000,
-  B00000000,B00000001,B00000000,B01000000,B00010000,B00000000,B00000000,
-  B00000000,B00000011,B00000000,B01000000,B00001000,B00000000,B00000000,
-  B00000000,B00000110,B00000000,B01000000,B00001100,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00000000,B01000000,B00000000,B00000000,B00000000
-};
-
 const unsigned char clearS1[] PROGMEM = {
   B00000000,B00000000,B00000000,B00000000,B00000000,
   B00000000,B00000000,B00100000,B00000000,B00000000,
@@ -385,31 +348,53 @@ const unsigned char clouds[] PROGMEM = {
   B00000000,B00000000,B00000000,B00000000,B00000000,B00000000,B00000000
 };
 
+const unsigned char bitmapSunrise[] PROGMEM = {
+  B00000000,B00000000,B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00100000,B00000000,B00000000,
+  B00000000,B00000000,B01110000,B00000000,B00000000,
+  B00000000,B00000000,B11111000,B00000000,B00000000,
+  B00000000,B00000001,B00100100,B00000000,B00000000,
+  B00000000,B00000000,B00100000,B00000000,B00000000,
+  B00000000,B00100000,B00100000,B00100000,B00000000,
+  B00000000,B00100000,B00100000,B01000000,B00000000,
+  B00000000,B00010000,B00000000,B01000000,B00000000,
+  B00000000,B00001000,B01110000,B10000000,B00000000,
+  B00000000,B00000011,B10001111,B00000000,B00000000,
+  B00110000,B00001100,B00000001,B10000000,B01100000,
+  B00001100,B00010000,B00000000,B11000001,B10000000,
+  B00000110,B00100000,B00000000,B00100110,B00000000,
+  B00000000,B01000000,B00000000,B00110000,B00000000,
+  B00000000,B01000000,B00000000,B00010000,B00000000,
+  B00000000,B10000000,B00000000,B00001000,B00000000,
+  B00000000,B10000000,B00000000,B00001000,B00000000,
+  B00000000,B11111111,B11111111,B11111000,B00000000,
+  B00000000,B00000000,B00000000,B00000000,B00000000,
+  B00111111,B11111111,B11111111,B11111111,B11100000,
+  B00000000,B00000000,B00000000,B00000000,B00000000
+};
 
-const unsigned char weather1[] PROGMEM = {
+const unsigned char bitmapSunset[] PROGMEM = {
   B00000000,B00000000,B00000000,B00000000,B00000000,
-  B00000000,B00000000,B00011111,B11000000,B00000000,
-  B00000000,B00000000,B01100000,B01100000,B00000000,
-  B00000000,B00000000,B10000000,B00010000,B00000000,
-  B00000000,B00000001,B00000000,B00001000,B00000000,
-  B00000000,B00000011,B00000000,B00000111,B00000000,
-  B00000000,B00000010,B00000000,B00000000,B11000000,
-  B00000000,B01111110,B00000000,B00000000,B01100000,
-  B00000000,B10000000,B00000000,B00000000,B00110000,
-  B00000001,B00000000,B00000000,B00000000,B00010000,
-  B00000011,B00000000,B00000000,B00000000,B00010000,
-  B00000110,B00000000,B00000000,B00000000,B00010000,
-  B00011100,B00000000,B00000000,B00000000,B00010000,
-  B00100000,B00000000,B00000000,B00000000,B00011000,
-  B01000000,B00000000,B00000000,B00000000,B00001000,
-  B01000000,B00000000,B00000000,B00000000,B00000100,
-  B11000000,B00000000,B00000000,B00000000,B00000100,
-  B01000000,B00000000,B00000000,B00000000,B00000100,
-  B01000000,B00000000,B00000000,B00000000,B00001100,
-  B01000000,B00000000,B00000000,B00000000,B00001000,
-  B00100000,B00000000,B00000000,B00000000,B00010000,
-  B00011111,B11111111,B11111111,B11111111,B11100000,
+  B00000000,B00000000,B00100000,B00000000,B00000000,
+  B00000000,B00000000,B00100000,B00000000,B00000000,
+  B00000000,B00000000,B00100000,B00000000,B00000000,
+  B00000000,B00000001,B00100100,B00000000,B00000000,
+  B00000000,B00000000,B11111000,B00000000,B00000000,
+  B00000000,B00100000,B01110000,B00100000,B00000000,
+  B00000000,B00100000,B00100000,B01000000,B00000000,
+  B00000000,B00010000,B00000000,B01000000,B00000000,
+  B00000000,B00001000,B01110000,B10000000,B00000000,
+  B00000000,B00000011,B10001111,B00000000,B00000000,
+  B00110000,B00001100,B00000001,B10000000,B01100000,
+  B00001100,B00010000,B00000000,B11000001,B10000000,
+  B00000110,B00100000,B00000000,B00100110,B00000000,
+  B00000000,B01000000,B00000000,B00110000,B00000000,
+  B00000000,B01000000,B00000000,B00010000,B00000000,
+  B00000000,B10000000,B00000000,B00001000,B00000000,
+  B00000000,B10000000,B00000000,B00001000,B00000000,
+  B00000000,B11111111,B11111111,B11111000,B00000000,
   B00000000,B00000000,B00000000,B00000000,B00000000,
+  B00111111,B11111111,B11111111,B11111111,B11100000,
   B00000000,B00000000,B00000000,B00000000,B00000000
 };
 
@@ -438,6 +423,19 @@ String date1="";
 String date="";
 String country="";
 
+String main2 = "";
+String main3 = "";
+String main4 = "";
+int temp2 = 0;
+int temp3 = 0;
+int temp4 = 0;
+int timeSunrise = 0;
+int timeSunset = 0;
+uint8_t sunriseH = 0;
+uint8_t sunriseM = 0;
+uint8_t sunsetH = 0;
+uint8_t sunsetM = 0;
+
 int getD=-1;
 int getH=-1;
 int getM=-1;
@@ -460,45 +458,38 @@ void connectWifi() {
   Serial.println();
 }
 
-void initScreen()
-{
-  tft.initR(INITR_BLACKTAB);   // initialize a ST7735S chip, black tab
-  //tft.setRotation(1);
-  tft.fillScreen(ST7735_BLACK);
-  //layout
-    tft.drawFastHLine(0, 0, tft.width(), ST7735_WHITE);
-    tft.drawFastHLine(1, 159, tft.width(), ST7735_WHITE);
-    tft.drawFastVLine(0, 0, tft.height(), ST7735_WHITE);
-    tft.drawFastVLine(127, 0, tft.height(), ST7735_WHITE);
-    tft.drawFastHLine(1, 140, tft.width(), ST7735_WHITE);
-    tft.drawFastHLine(1, 19, tft.width(), ST7735_WHITE);
-  }
+void initScreen() {
+  tft.begin();
+  tft.setRotation(0); // Установка вертикальной ориентации экрана
+  tft.fillScreen(TFT_BLACK); // Заливка фона черным цветом
+}
+
 void setup() {
-Serial.begin(9600);
-delay(500);
-connectWifi();
-timeClient.begin();
-getTime();
-getForecastData();
-//delay(10000);
-initScreen();
+  Serial.begin(9600);
+  delay(500);
+  connectWifi();
+  timeClient.begin();
+  getTime();
+  getForecastData();
+  initScreen();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-getTime();
-screen1();
-delay(10000);
-getCurrentData();
-screen2();
-delay(10000);
-getForecastData();
-screen3();
-delay(10000);
+  getTime();
+  drawTime();
+  drawDate();
+  getCurrentData();
+  drawScreen1();
+  delay(10000);
+  getForecastData();
+  drawScreen2();
+  delay(10000);
+  timeForSunriseAndSunset();
+  drawScreen3();
+  delay(10000);
 }
 
-void getTime()
-{
+void getTime() {
   timeClient.update();
   getD=timeClient.getDay();
   getH=timeClient.getHours();
@@ -517,8 +508,7 @@ void getTime()
   Serial.println(timeClient.getFormattedTime());
 }
 
-void getCurrentData()
-{
+void getCurrentData() {
   OpenWeatherMapCurrentData data;
   client.setLanguage(OPEN_WEATHER_MAP_LANGUAGE);
   client.setMetric(IS_METRIC);
@@ -537,104 +527,110 @@ void getCurrentData()
   Serial.printf("pressure: %d\n", pres);
   Serial.printf("humidity: %d\n", humidity);
   Serial.printf("windSpeed: %f\n", wind);
-  
-  }
+}
 
-  void getForecastData()
-  {
-    String serverPath = "http://api.openweathermap.org/data/2.5/forecast?q=" + OPEN_WEATHER_MAP_LOCATION + "&appid=" + OPEN_WEATHER_MAP_APP_ID + "&units=metric&lang=" + OPEN_WEATHER_MAP_LANGUAGE;
-    String json = httpGETRequest(serverPath.c_str());
-     //updateForecastData(json);
-    tempMin1=100;
-    tempMin2=100;
-    tempMin3=100;
-    tempMin4=100;
-    tempMax1=0;
-    tempMax2=0;
-    tempMax3=0;
-    tempMax4=0;
-    humidity1=0;
-    humidity2=0;
-    humidity3=0;
-    humidity4=0;
-    int t=-1;
+void getForecastData() {
+  String serverPath = "http://api.openweathermap.org/data/2.5/forecast?q=" + OPEN_WEATHER_MAP_LOCATION + "&appid=" + OPEN_WEATHER_MAP_APP_ID + "&units=metric&lang=" + OPEN_WEATHER_MAP_LANGUAGE;
+  String json = httpGETRequest(serverPath.c_str());
+
+  //updateForecastData(json);
+  tempMin1=100;
+  tempMin2=100;
+  tempMin3=100;
+  tempMin4=100;
+  tempMax1=0;
+  tempMax2=0;
+  tempMax3=0;
+  tempMax4=0;
+  humidity1=0;
+  humidity2=0;
+  humidity3=0;
+  humidity4=0;
+  int t=-1;
   t=json.indexOf("dt");
   json=json.substring(t+3,json.length());
   t=-1;
   t=json.indexOf("country");
   country=json.substring(t+10,t+12);
   t=-1;
+  t = json.indexOf("sunrise");
+  int tSunEnd = json.indexOf("sunset");
+  timeSunrise = json.substring(t + 9, tSunEnd - 2).toInt();
+  timeSunset = json.substring(tSunEnd + 8, tSunEnd + 18).toInt();
+  t = -1;
   date1="";
   t=json.indexOf("dt_txt");
   date1=json.substring(t+9,t+19);
-  if(cnt==0)
-  {
+
+  if (cnt==0) {
     date=date1;
     cnt++;
-    }
+  }
+
   int tc=json.substring(t+20,t+22).toInt();
   t=-1;
   tc=(((tc*(-1))+21)/3)+1;
-  for(int i=0;i<tc;i++)
-  {
+
+  for (int i=0;i<tc;i++) {
     t=json.indexOf("dt_txt");
     String s=json.substring(0,t+31);
     json=json.substring(t+31,json.length());
     t=-1;
     t=s.indexOf("temp_min");
-    int temp=s.substring(t+10,t+12).toInt();
+    int temp=s.substring(t+10,t+13).toInt();
     Serial.println(temp);
-    if(tempMin1>temp)
-    tempMin1=temp;
+    if (tempMin1>temp) tempMin1=temp;
     t=-1;
     t=s.indexOf("temp_max");
-    temp=s.substring(t+10,t+12).toInt();
-    if(tempMax1<temp)
-    tempMax1=temp;
+    temp=s.substring(t+10,t+13).toInt();
+    if (tempMax1<temp) tempMax1=temp;
     t=-1;
     t=s.indexOf("humidity");
     temp=s.substring(t+10,t+12).toInt();
     humidity1=humidity1+temp;
     t=-1;
-    }
-    humidity1=humidity1/tc;
+  }
+  humidity1=humidity1/tc;
     
-    for(int i=0;i<8;i++)
-    {
-      t=json.indexOf("dt_txt");
+  for(int i=0;i<8;i++) {
+    t=json.indexOf("dt_txt");
     String s=json.substring(0,t+31);
     json=json.substring(t+31,json.length());
     t=-1;
     t=s.indexOf("temp_min");
-    int temp=s.substring(t+10,t+12).toInt();
-    if(tempMin2>temp)
-    tempMin2=temp;
+    int temp=s.substring(t+10,t+13).toInt();
+    if(tempMin2>temp) tempMin2=temp;
     t=-1;
     t=s.indexOf("temp_max");
-    temp=s.substring(t+10,t+12).toInt();
-    if(tempMax2<temp)
-    tempMax2=temp;
+    temp=s.substring(t+10,t+13).toInt();
+    if(tempMax2<temp) tempMax2=temp;
     t=-1;
     t=s.indexOf("humidity");
     temp=s.substring(t+10,t+12).toInt();
     humidity2=humidity2+temp;
     t=-1;
-      }
-      humidity2=humidity2/8;
+    t = s.indexOf("main", 30);
+    int tEnd = s.indexOf("description");
+    main2 = s.substring(t + 7, tEnd - 3);
+    t = -1;
+    t = s.indexOf("temp");
+    temp2 = s.substring(t + 6, t + 9).toInt();
+    t = -1;
+  }
+  humidity2=humidity2/8;
       
-      for(int i=0;i<8;i++)
-    {
-      t=json.indexOf("dt_txt");
+  for(int i=0;i<8;i++) {
+    t=json.indexOf("dt_txt");
     String s=json.substring(0,t+31);
     json=json.substring(t+31,json.length());
     t=-1;
     t=s.indexOf("temp_min");
-    int temp=s.substring(t+10,t+12).toInt();
+    int temp=s.substring(t+10,t+13).toInt();
     if(tempMin3>temp)
     tempMin3=temp;
     t=-1;
     t=s.indexOf("temp_max");
-    temp=s.substring(t+10,t+12).toInt();
+    temp=s.substring(t+10,t+13).toInt();
     if(tempMax3<temp)
     tempMax3=temp;
     t=-1;
@@ -642,22 +638,27 @@ void getCurrentData()
     temp=s.substring(t+10,t+12).toInt();
     humidity3=humidity3+temp;
     t=-1;
-      }
-      humidity3=humidity3/8;
+    t = s.indexOf("main", 30);
+    int tEnd = s.indexOf("description");
+    main3 = s.substring(t + 7, tEnd - 3);
+    t = -1;
+    t = s.indexOf("temp");
+    temp3 = s.substring(t + 6, t + 9).toInt();
+    t = -1;
+  }
+  humidity3=humidity3/8;
 
-      for(int i=0;i<8;i++)
-    {
-      t=json.indexOf("dt_txt");
+  for(int i=0;i<8;i++) {
+    t=json.indexOf("dt_txt");
     String s=json.substring(0,t+31);
     json=json.substring(t+31,json.length());
     t=-1;
     t=s.indexOf("temp_min");
-    int temp=s.substring(t+10,t+12).toInt();
-    if(tempMin4>temp)
-    tempMin4=temp;
+    int temp=s.substring(t+10,t+13).toInt();
+    if(tempMin4>temp) tempMin4=temp;
     t=-1;
     t=s.indexOf("temp_max");
-    temp=s.substring(t+10,t+12).toInt();
+    temp=s.substring(t+10,t+13).toInt();
     if(tempMax4<temp)
     tempMax4=temp;
     t=-1;
@@ -665,24 +666,27 @@ void getCurrentData()
     temp=s.substring(t+10,t+12).toInt();
     humidity4=humidity4+temp;
     t=-1;
-      }
-      humidity4=humidity4/8;
-
-     
-     json="";
-     Serial.println(date1);
-     Serial.println();
-     //screen3();
-     Serial.print("Today ");Serial.print("Min Temp - ");Serial.print(tempMin1);Serial.println(" Max Temp - ");Serial.print(tempMax1);Serial.println(" Humidity - ");Serial.println(humidity1);
-     Serial.print("Tomorrow ");Serial.print("Min Temp - ");Serial.print(tempMin2);Serial.print(" Max Temp - ");Serial.print(tempMax2);Serial.print(" Humidity - ");Serial.println(humidity2);
-     Serial.print("Day After Tomorrow ");Serial.print("Min Temp - ");Serial.print(tempMin3);Serial.print(" Max Temp - ");Serial.print(tempMax3);Serial.print(" Humidity - ");Serial.println(humidity3);
-     Serial.print("Today + 3 ");Serial.print("Min Temp - ");Serial.print(tempMin4);Serial.print(" Max Temp - ");Serial.print(tempMax4);Serial.print(" Humidity - ");Serial.println(humidity4);
-     
-   
+    t = s.indexOf("main", 30);
+    int tEnd = s.indexOf("description");
+    main4 = s.substring(t + 7, tEnd - 3);
+    t = -1;
+    t = s.indexOf("temp");
+    temp4 = s.substring(t + 6, t + 9).toInt();
+    t = -1;
   }
+  humidity4=humidity4/8;
+    
+  json="";
+  Serial.println(date1);
+  Serial.println();
+  Serial.print("Today ");Serial.print("Sunrise - ");Serial.print(timeSunrise);Serial.print(" Sunset - ");Serial.print(timeSunset);Serial.print(" Min Temp - ");Serial.print(tempMin1);Serial.println(" Max Temp - ");Serial.print(tempMax1);Serial.println(" Humidity - ");Serial.println(humidity1);
+  Serial.print("Tomorrow ");Serial.print("Temp - ");Serial.print(temp2);Serial.print(" main2 - ");Serial.print(main2);Serial.print(" Min Temp - ");Serial.print(tempMin2);Serial.print(" Max Temp - ");Serial.print(tempMax2);Serial.print(" Humidity - ");Serial.println(humidity2);
+  Serial.print("Day After Tomorrow ");Serial.print("Temp - ");Serial.print(temp2);Serial.print(" main3 - ");Serial.print(main3);Serial.print(" Min Temp - ");Serial.print(tempMin3);Serial.print(" Max Temp - ");Serial.print(tempMax3);Serial.print(" Humidity - ");Serial.println(humidity3);
+  Serial.print("Today + 3 ");Serial.print("Temp - ");Serial.print(temp2);Serial.print(" main4 - ");Serial.print(main4);Serial.print(" Min Temp - ");Serial.print(tempMin4);Serial.print(" Max Temp - ");Serial.print(tempMax4);Serial.print(" Humidity - ");Serial.println(humidity4);
+}
 
 
-    String httpGETRequest(const char* serverName) {
+String httpGETRequest(const char* serverName) {
   HTTPClient http; 
   http.begin(wifiClient, serverName);
   
@@ -704,265 +708,247 @@ void getCurrentData()
   return payload;
 }
 
-void screen1()
-{
-      tft.setFont();
-      tft.setTextColor(ST7735_WHITE);
-      tft.setCursor(10,7);
-      tft.print(OPEN_WEATHER_MAP_LOCATION);
-      tft.setCursor(110,7);
-      tft.print(country);
-      tft.fillRect(3, 142 , 123, 16, ST7735_BLACK);
-      tft.setCursor(10,146);
-      if(getH<10)
+void drawTime() {
+  if (oM != getM) {
+    oM = getM;
+    int xpos = 5;
+    int ypos = 35; // Top left corner ot clock text, about half way down
+    tft.loadFont(Golos_Text_Regular84);
+    tft.fillRect(2, 34, 235, 100, TFT_BLACK);
+    tft.setCursor(xpos, ypos);
+    if (getH < 10) { 
       tft.print(0);
-      tft.print(getH);
-      tft.print(":");
-      if(getM<10)
+      xpos = tft.getCursorX();
+    }
+    tft.print(getH);
+    xpos = tft.getCursorX();
+    tft.setCursor(xpos, 35 - 8);
+    tft.print(":");
+    xpos = tft.getCursorX();
+    tft.setCursor(xpos, 35);
+    if (getM < 10) {
       tft.print(0);
-      tft.print(getM);
-      tft.setCursor(60,146);
-      tft.print(date);
-      tft.fillRect(3, 22 , 123, 116, ST7735_BLACK);
-      tft.setFont(&FreeSansBold18pt7b);
-      //tft.setTextColor(ST7735_WHITE);
-      tft.setTextSize(1);
-      tft.setCursor(22,60);
-      tft.setTextColor(colors[2]);
-      if(getH<10)
-      tft.print(0);
-      tft.print(getH);
-      tft.print(":");
-      if(getM<10)
-      tft.print(0);
-      tft.print(getM);
-      tft.setFont(&FreeSans9pt7b);
-      int daylen=0;
-      daylen=dayName.length();
-      if(daylen==6)
-      tft.setCursor(35,90);
-      else if (daylen==7)
-      tft.setCursor(27,90);
-      else if (daylen==8)
-      tft.setCursor(21,90);
-      else if (daylen==9)
-      tft.setCursor(15,90);
-      tft.setTextColor(colors[getD]);
-      tft.print(dayName);
-      tft.setTextColor(ST7735_WHITE);
-      tft.setCursor(19,120);
-      tft.print(date);
+      xpos = tft.getCursorX();
+    }
+    tft.print(getM);
+    tft.unloadFont();
+  }
+}
+
+void drawDate() {
+  //2025-01-14
+  //0123456789
+  int year = date.substring(0, 4).toInt();
+  int monthNum = date.substring(5, 7).toInt();
+  int day = date.substring(8).toInt();
+  tft.loadFont(Golos_Text_Regular22);
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(12, 110);
+  tft.print(dayName);
+  tft.print(", ");
+  tft.print(day);
+  tft.print(" ");
+  tft.print(monthsNames[monthNum]);
+  tft.print(", ");
+  tft.print(year);
+  tft.unloadFont();
+}
+
+void drawScreen1() {
+  drawTime();
+  tft.fillRect(0, 161, 240, 158, TFT_BLACK);
+
+  drawWeatherbitmap(itsMain, 0, 220);
+  tft.setCursor(55, 220);
+  tft.loadFont(Golos_Text_Regular44);
+  tft.setTextColor(TFT_WHITE);
+  tft.print(tempF);
+  tft.print("°");
+
+  tft.setCursor(140, 220);
+  tft.print(humidity);
+  tft.unloadFont();
+
+  tft.loadFont(Golos_Text_Regular30);
+  tft.print("%");
+  tft.unloadFont();
+
+  tft.loadFont(Golos_Text_Regular22);
+  tft.setCursor(10, 270);
+  findWeatherNum(itsMain);
+  tft.print(weatherNames[weatherNum]);
+
+  tft.setCursor(120, 270);
+  tft.print("влажность");
+  tft.unloadFont();
+}
+
+void drawScreen2() {
+  drawTime();
+  tft.fillRect(0, 161, 240, 158, TFT_BLACK);
+
+  forecastDayName_screen2();
+  tft.loadFont(Golos_Text_Regular22);
+  tft.setCursor(30, 180);
+  tft.print(dayName2);
+
+  tft.setCursor(110, 180);
+  tft.print(dayName3);
+
+  tft.setCursor(190, 180);
+  tft.print(dayName4);
+  tft.unloadFont();
+
+  drawWeatherbitmap(main2, 15, 210);
+  drawWeatherbitmap(main3, 95, 210);
+  drawWeatherbitmap(main4, 175, 210);
+
+  tft.loadFont(Golos_Text_Regular30);
+  tft.setCursor(15, 260);
+  tft.print(temp2);
+  tft.print("°");
+
+  tft.setCursor(95, 260);
+  tft.print(temp3);
+  tft.print("°");
+
+  tft.setCursor(175, 260);
+  tft.print(temp4);
+  tft.print("°");
+  tft.unloadFont();
+
+  tft.loadFont(Golos_Text_Regular12);
+  tft.setCursor(15, 290);
+  findWeatherNum(main2);
+  tft.print(weatherNames[weatherNum]);
+
+  tft.setCursor(95, 290);
+  findWeatherNum(main3);
+  tft.print(weatherNames[weatherNum]);
+
+  tft.setCursor(175, 290);
+  findWeatherNum(main4);
+  tft.print(weatherNames[weatherNum]);
+  tft.unloadFont();
+}
+
+void drawScreen3() {
+  drawTime();
+  tft.fillRect(0, 161, 240, 158, TFT_BLACK);
+
+  tft.drawBitmap(15, 200, bitmapSunrise, 39, 21, TFT_WHITE);
+  tft.drawBitmap(130, 200, bitmapSunset, 39, 21, TFT_WHITE);
+
+  tft.setCursor(15, 230);
+  tft.loadFont(Golos_Text_Regular22);
+  tft.print("восход");
+
+  tft.setCursor(130, 230);
+  tft.print("закат");
+  tft.unloadFont();
+
+  tft.loadFont(Golos_Text_Regular44);
+  tft.setCursor(15, 260);
+  tft.print(sunriseH);
+  tft.print(":");
+  tft.print(sunriseM);
+
+  tft.setCursor(130, 260);
+  tft.print(sunsetH);
+  tft.print(":");
+  tft.print(sunsetM);
+  tft.unloadFont();
+}
+
+void forecastDayName_screen2() {
+  if (getD == 6) {
+    dayName2 = daysOfTheWeek[0];
+    dayName3 = daysOfTheWeek[1];
+    dayName4 = daysOfTheWeek[2];
+  }
+  else if (getD == 5) {
+    dayName2 = daysOfTheWeek[6];
+    dayName3 = daysOfTheWeek[0];
+    dayName4 = daysOfTheWeek[1];
+  }
+  else if (getD == 4) {
+    dayName2 = daysOfTheWeek[5];
+    dayName3 = daysOfTheWeek[6];
+    dayName4 = daysOfTheWeek[0];
+  }
+  else {
+    dayName2 = daysOfTheWeek[getD + 1];
+    dayName3 = daysOfTheWeek[getD + 2];
+    dayName4 = daysOfTheWeek[getD + 3];
+  }
+}
+
+void drawWeatherbitmap(String mainCur, int xpos, int ypos) {
+  if(mainCur.equals("Clouds")) {
+    tft.drawBitmap(xpos, ypos, clouds, 51, 38, TFT_WHITE);
   }
 
-  void screen2()
-  {
-    tft.fillRect(3, 22 , 123, 116, ST7735_BLACK);
-    //tft.drawBitmap(8, 25, clouds, 51, 38,ST7735_WHITE);
-    displayweatherbitmap_screen2();
-  tft.setFont(&FreeSansBold9pt7b);
-  tft.setTextColor(ST7735_WHITE);
-  //tft.setTextColor(ST7735_WHITE);
-      tft.setTextSize(1);
-      tft.setCursor(2,80);
-      tft.setTextColor(col);
-      tft.print(itsMain);
-      tft.setCursor(64,50);
-//      int range = map(tempF, 0, 60, 0, 6);
-//      tft.setTextColor(colors[range]);
-       if(tempF<=0)
-       {
-        tft.setTextColor(0x07FF);
-        }
-        else if(tempF>0 && tempF<5)
-       {
-        tft.setTextColor(0x03DF);
-        }
-        else if(tempF>6 && tempF<16)
-       {
-        tft.setTextColor(0x87E0);
-        }
-        else if(tempF>16 && tempF<27)
-       {
-        tft.setTextColor(0xFC00);
-        }
-        else if(tempF>27 && tempF<37)
-       {
-        tft.setTextColor(0xFA20);
-        }
-        else
-       {
-        tft.setTextColor(0xF800);
-        }
-      tft.print(tempF);
-      tft.setFont();
-      tft.setCursor(87,35);
-      tft.print("C");
-      
-      tft.setTextColor(ST7735_WHITE);
-      if(humidity<10)
-      {
-        tft.setTextColor(0x04E0);
-        }
-        else if(humidity<20 && humidity>10)
-      {
-        tft.setTextColor(0x87E0);
-        }
-        else if(humidity<30 && humidity>20)
-      {
-        tft.setTextColor(0xFFE0);
-        }
-        else if(humidity<40 && humidity>30)
-      {
-        tft.setTextColor(0xFB20);
-        }
-        else if(humidity>40)
-      {
-        tft.setTextColor(0xF800);
-        }
-      tft.setFont(&FreeSansBold9pt7b);
-      tft.setCursor(94,50);
-      tft.print(humidity);
-      tft.setFont();
-      tft.setCursor(118,35);
-      tft.print("%");
-      tft.setCursor(4,85);
-      tft.setTextColor(col);
-      String s=desc;
-      String s1="";
-      String s2="";
-      if(s.length()>20)
-      {
-      char c[s.length()];
-      s.toCharArray(c,s.length());
-      for(int i=20;i>0;i--)
-      {
-        if(c[i]==' ')
-        {
-          s1=s.substring(0,i+1);
-          int j=20-i;
-          for(int k=0;k<j;k++)
-          {
-            s1=s1+" ";
-            }
-          s2=s.substring(i+1,s.length());
-          break;
-          }
-        }
-        s2=" "+s2;
-        tft.print(s1+s2);
-      }
-      else
-      {
-        tft.print(s);
-        }
-      tft.setCursor(8,110);
-      tft.setTextColor(0x87F0);
-      tft.print("Pressure  WindSpeed");
-      tft.setCursor(11,122);
-      tft.print(pres);
-      tft.print(" hpa");
-      tft.setCursor(75,122);
-      tft.print(wind);
-      tft.print(" m/s");
-      tft.setTextColor(ST7735_WHITE);
-    }
+  else if(mainCur.equals("Rain")) {
+    tft.drawBitmap(xpos, ypos, rain, 51, 40, TFT_WHITE);
+  }
 
-    void screen3()
-    {
-      int day2=getD+1;
-      if(day2>6)
-      day2=day2-7;
-      int day3=day2+1;
-      if(day3>6)
-      day3=day3-7;
-      int day4=day3+1;
-      if(day4>6)
-      day4=day4-7;
-      tft.fillRect(2, 22 , 124, 116, ST7735_BLACK);
-      tft.drawBitmap(8, 28, weather1, 39, 24,colors[day2]);
-    tft.drawBitmap(8, 68, weather1, 39, 24,colors[day3]);
-    tft.drawBitmap(8, 108, weather1, 39, 24,colors[day4]);
-      tft.setFont();
-      tft.setTextColor(colors[day2]);
-    tft.setCursor(65,25);
-    tft.print(daysOfTheWeek[day2]);
-    tft.setCursor(97,38);
-    tft.print("C");
-    tft.setCursor(105,44);
-    tft.print(humidity2);
-    tft.print("%");
-    tft.setFont(&FreeSansBold9pt7b);
-    tft.setCursor(50,50);
-    tft.print(tempMin2);
-    tft.print("/");
-    tft.print(tempMax2);
-    tft.setFont();
-    tft.setTextColor(colors[day3]);
-    tft.setCursor(65,65);
-    tft.print(daysOfTheWeek[day3]);
-    tft.setCursor(97,78);
-    tft.print("C");
-    tft.setCursor(105,84);
-    tft.print(humidity3);
-    tft.print("%");
-    tft.setFont(&FreeSansBold9pt7b);
-    tft.setCursor(50,90);
-    tft.print(tempMin3);
-    tft.print("/");
-    tft.print(tempMax3);
-    tft.setFont();
-    tft.setTextColor(colors[day4]);
-    tft.setCursor(65,105);
-    tft.print(daysOfTheWeek[day4]);
-    tft.setCursor(97,118);
-    tft.print("C");
-    tft.setCursor(105,124);
-    tft.print(humidity4);
-    tft.print("%");
-    tft.setFont(&FreeSansBold9pt7b);
-    tft.setCursor(50,130);
-    tft.print(tempMin4);
-    tft.print("/");
-    tft.print(tempMax4);
-      }
+  else if(mainCur.equals("Thunderstorm")) {
+    tft.drawBitmap(xpos, ypos, thunder, 51, 40, TFT_WHITE);
+  }
 
-      void displayweatherbitmap_screen2()
-      {
-        if(itsMain.equals("Clouds"))
-        {
-          // col=0xFFE0;
-          col=0x7BEF;
-          // tft.drawBitmap(8, 25, clouds, 51, 38,0xFFE0);
-          tft.drawBitmap(8, 25, clouds, 51, 38, 0x7BEF);
-          }
-          else if(itsMain.equals("Rain"))
-        {
-          col=0x07FF;
-          tft.drawBitmap(8, 25, rain, 51, 40,0x07FF);
-          }
-          else if(itsMain.equals("Thunderstorm"))
-        {
-          col=0x03DF;
-          tft.drawBitmap(8, 25, thunder, 51, 40,0x03DF);
-          }
-          else if(itsMain.equals("Clear"))
-        {
-          col=0xFFE0;
-          tft.drawBitmap(8, 25, clearS1, 37, 40,0xFFE0);
-          }
-          else if(itsMain.equals("Drizzle"))
-        {
-          col=0x07FF;
-          tft.drawBitmap(8, 25, drizzle, 51, 40,0x07FF);
-          }
-          else if(itsMain.equals("Snow"))
-        {
-          col=ST7735_WHITE;
-          tft.drawBitmap(8, 25, snow, 51, 40,ST7735_WHITE);
-          }
-          else
-        {
-          col=0xD6D5;
-          tft.drawBitmap(8, 25, mist, 51, 40,0xD6D5);
-          }
-        }
+  else if(mainCur.equals("Clear")) {
+    tft.drawBitmap(xpos, ypos, clearS1, 37, 40, TFT_WHITE);
+  }
+
+  else if(mainCur.equals("Drizzle")) {
+    tft.drawBitmap(xpos, ypos, drizzle, 51, 40, TFT_WHITE);
+  }
+
+  else if(mainCur.equals("Snow")) {
+    tft.drawBitmap(xpos, ypos, snow, 51, 40, TFT_WHITE);
+  }
+
+  else {
+    tft.drawBitmap(xpos, ypos, mist, 51, 40, TFT_WHITE);
+  }
+}
+
+void findWeatherNum(String main) {
+  if(main.equals("Clouds")) {
+    weatherNum = 0;
+  }
+
+  else if(main.equals("Rain")) {
+    weatherNum = 1;
+  }
+
+  else if(main.equals("Thunderstorm")) {
+    weatherNum = 2;
+  }
+
+  else if(main.equals("Clear")) {
+    weatherNum = 3;
+  }
+
+  else if(main.equals("Drizzle")) {
+    weatherNum = 4;
+  }
+
+  else if(main.equals("Snow")) {
+    weatherNum = 5;
+  }
+
+  else {
+    weatherNum = 6;
+  }
+}
+
+void timeForSunriseAndSunset() {
+  UnixTime stamp(utcOffsetInSeconds / 3600);
+  stamp.getDateTime(timeSunrise);
+  sunriseH = stamp.hour;
+  sunriseM = stamp.minute;
+  stamp.getDateTime(timeSunset);
+  sunsetH = stamp.hour;
+  sunsetM = stamp.minute;
+}
